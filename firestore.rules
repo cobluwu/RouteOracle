@@ -24,6 +24,11 @@ service cloud.firestore {
       return resource.data;
     }
 
+    // Test connection health check
+    match /test/{testId} {
+      allow read: if true;
+    }
+
     // User Profile Rules
     match /users/{userId} {
       allow get: if isSignedIn() && (request.auth.uid == userId);

@@ -54,7 +54,7 @@ const staggerContainer: Variants = {
 };
 
 // --- Scroll Reveal Text Component ---
-const Word = ({ children, progress, range }: { children: string; progress: MotionValue<number>; range: [number, number] }) => {
+const Word = ({ children, progress, range }: { children: string; progress: MotionValue<number>; range: [number, number]; key?: React.Key }) => {
   const opacity = useTransform(progress, range, [0.15, 1]);
   const color = useTransform(progress, range, ["#9ca3af", "#111827"]);
   const y = useTransform(progress, range, [16, 0]);
@@ -110,7 +110,7 @@ const textLetterVariants: Variants = {
   }
 };
 
-const AnimatedLetter = ({ letter, index, scrollY, isGuard }: { letter: string; index: number; scrollY: MotionValue<number>; isGuard: boolean }) => {
+const AnimatedLetter = ({ letter, index, scrollY, isGuard }: { letter: string; index: number; scrollY: MotionValue<number>; isGuard: boolean; key?: React.Key }) => {
   const fadeOutStart = 30 + (index * 12);
   const fadeOutEnd = fadeOutStart + 160;
   
@@ -136,7 +136,7 @@ const AnimatedLetter = ({ letter, index, scrollY, isGuard }: { letter: string; i
 };
 
 // --- Framer Motion Interactive Text Highlighting Pattern (Per Code Conventions) ---
-const ScrollHighlightWord = ({ children, progress, range }: { children: string; progress: MotionValue<number>; range: [number, number] }) => {
+const ScrollHighlightWord = ({ children, progress, range }: { children: string; progress: MotionValue<number>; range: [number, number]; key?: React.Key }) => {
   const scaleX = useTransform(progress, range, [0, 1]);
   return (
     <span className="relative inline-block font-bold px-[3px] mx-[2px] z-10">

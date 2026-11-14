@@ -969,7 +969,7 @@ function DisruptionCard({ disruption }: { disruption: DisruptionJSON }) {
 }
 
 // 4. PlanOptionCard
-function PlanOptionCard({ plan, rank, selectable, selected, onClick }: { plan: PlanOption, rank: number, selectable?: boolean, selected?: boolean, onClick?: () => void }) {
+function PlanOptionCard({ plan, rank, selectable, selected, onClick }: { plan: PlanOption, rank: number, selectable?: boolean, selected?: boolean, onClick?: () => void, key?: React.Key }) {
   if (!plan) return null;
   return (
     <div 
@@ -1068,7 +1068,7 @@ function ExecutionChecklist({ execution }: { execution: ExecutionResult }) {
 }
 
 // 8. AuditEntryRow
-function AuditEntryRow({ entry }: { entry: AuditEntry }) {
+function AuditEntryRow({ entry }: { entry: AuditEntry, key?: React.Key }) {
   return (
     <div className="p-3.5 rounded-md bg-white border border-[#e5e1d8] text-xs font-mono flex flex-wrap items-center justify-between gap-3 shadow-xs">
       <div className="flex items-center gap-3">

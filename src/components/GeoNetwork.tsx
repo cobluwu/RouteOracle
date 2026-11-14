@@ -1,15 +1,24 @@
-import React, { useState, useEffect } from 'react';
-import {
-  APIProvider,
-  Map as GoogleMap,
-  AdvancedMarker,
-  Pin,
-  Polyline,
-  InfoWindow,
-  useMap
-} from '@vis.gl/react-google-maps';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useStore } from '../store';
-import { Navigation, Map as MapIcon, Layers, AlertTriangle, Radio, Train, Car, Compass } from 'lucide-react';
+import { 
+  Navigation, 
+  Map as MapIcon, 
+  Layers, 
+  AlertTriangle, 
+  Radio, 
+  Train, 
+  Compass, 
+  Maximize2, 
+  Minimize2, 
+  Info, 
+  Ship, 
+  Plane, 
+  Truck, 
+  CheckCircle2, 
+  Activity,
+  Anchor,
+  Globe2
+} from 'lucide-react';
 
 interface SelectedInfo {
   type: 'origin' | 'destination' | 'disruption' | 'waypoint' | 'wms';
@@ -18,78 +27,45 @@ interface SelectedInfo {
   details?: Record<string, any>;
 }
 
-// Tactical layer controller hook for Google Maps native Transit and Traffic layers
-function TacticalLayers({ rail, traffic }: { rail: boolean; traffic: boolean }) {
-  const map = useMap();
+// Global shipping lanes and maritime choke points for tactical rendering
+const MARITIME_CORRIDORS = [
+  // Transpacific (Asia to US West Coast)
+  { id: 'TP-1', name: 'Transpacific Northern', points: [[121.47, 31.23], [140.0, 38.0], [-160.0, 45.0], [-130.0, 40.0], [-118.24, 34.05]] },
+  // Asia to Europe via Suez
+  { id: 'AE-1', name: 'Suez Gateway Corridor', points: [[121.47, 31.23], [103.81, 1.35], [80.0, 6.0], [43.5, 12.5], [32.5, 29.9], [14.0, 36.0], [-5.6, 36.0], [4.47, 51.92]] },
+  // Asia to Europe via Cape of Good Hope
+  { id: 'AE-2', name: 'Cape Circumvention Route', points: [[121.47, 31.23], [103.81, 1.35], [75.0, -5.0], [45.0, -25.0], [18.4, -34.3], [-10.0, -10.0], [-15.0, 20.0], [4.47, 51.92]] },
+  // Transatlantic
+  { id: 'TA-1', name: 'North Atlantic Trunk', points: [[4.47, 51.92], [-10.0, 50.0], [-45.0, 42.0], [-74.0, 40.7]] },
+  // Eurasian Rail
+  { id: 'ER-1', name: 'Eurasian Intermodal Rail', points: [[106.55, 29.56], [87.61, 43.82], [61.4, 55.1], [37.6, 55.7], [19.0, 52.2], [6.76, 51.43]] },
+];
 
-  useEffect(() => {
-    if (!map || typeof google === 'undefined' || !google.maps) return;
-    const transitLayer = new google.maps.TransitLayer();
-    if (rail) {
-      transitLayer.setMap(map);
-    } else {
-      transitLayer.setMap(null);
-    }
-    return () => transitLayer.setMap(null);
-  }, [map, rail]);
-
-  useEffect(() => {
-    if (!map || typeof google === 'undefined' || !google.maps) return;
-    const trafficLayer = new google.maps.TrafficLayer();
-    if (traffic) {
-      trafficLayer.setMap(map);
-    } else {
-      trafficLayer.setMap(null);
-    }
-    return () => trafficLayer.setMap(null);
-  }, [map, traffic]);
-
-  return null;
-}
-
-// Auto-fit camera bounds to current mission coordinates
-function MapBoundsUpdater({ mapData }: { mapData: any }) {
-  const map = useMap();
-
-  useEffect(() => {
-    if (!map || !mapData || typeof google === 'undefined' || !google.maps) return;
-    if (!Array.isArray(mapData.origin_coords) || !Array.isArray(mapData.dest_coords)) return;
-
-    const bounds = new google.maps.LatLngBounds();
-    bounds.extend({ lat: mapData.origin_coords[1], lng: mapData.origin_coords[0] });
-    bounds.extend({ lat: mapData.dest_coords[1], lng: mapData.dest_coords[0] });
-
-    if (Array.isArray(mapData.disruption_coords)) {
-      bounds.extend({ lat: mapData.disruption_coords[1], lng: mapData.disruption_coords[0] });
-    }
-
-    if (mapData.options?.[0]?.waypoints) {
-      mapData.options[0].waypoints.forEach((wp: [number, number]) => {
-        if (Array.isArray(wp) && wp.length >= 2) {
-          bounds.extend({ lat: wp[1], lng: wp[0] });
-        }
-      });
-    }
-
-    map.fitBounds(bounds, { top: 60, right: 60, bottom: 60, left: 60 });
-  }, [map, mapData]);
-
-  return null;
-}
+// Major Choke Points
+const CHOKEPOINTS = [
+  { name: 'Suez Canal', coords: [32.34, 30.7], risk: 'Medium-High', type: 'Canal' },
+  { name: 'Strait of Malacca', coords: [101.5, 2.5], risk: 'Moderate', type: 'Strait' },
+  { name: 'Bab-el-Mandeb', coords: [43.3, 12.6], risk: 'High Conflict Zone', type: 'Strait' },
+  { name: 'Panama Canal', coords: [-79.9, 9.1], risk: 'Draft Restrictions', type: 'Canal' },
+  { name: 'Strait of Hormuz', coords: [56.4, 26.5], risk: 'Geopolitical Risk', type: 'Strait' },
+  { name: 'English Channel / Dover', coords: [1.4, 51.0], risk: 'Congestion', type: 'Strait' },
+];
 
 export default function GeoNetwork() {
   const mapData = useStore(state => state.mapState);
   const wmsNodes = useStore(state => state.wmsState);
-  const apiKey = import.meta.env.VITE_GOOGLE_MAPS_API_KEY || '';
 
   const [activeLayers, setActiveLayers] = useState({
-    rail: false,
-    traffic: false,
-    wms: true
+    maritime: true,
+    rail: true,
+    wms: true,
+    chokepoints: true,
   });
-  const [mapType, setMapType] = useState<'roadmap' | 'satellite' | 'hybrid' | 'terrain'>('roadmap');
+
+  const [viewPreset, setViewPreset] = useState<'global' | 'transpacific' | 'asia-europe' | 'americas'>('global');
   const [selectedInfo, setSelectedInfo] = useState<SelectedInfo | null>(null);
 
+  // Fallback map state if none loaded
   useEffect(() => {
     if (!mapData) {
       useStore.getState().setMapState({
@@ -97,402 +73,582 @@ export default function GeoNetwork() {
         origin_coords: [121.47, 31.23],
         dest_coords: [-118.24, 34.05], // Los Angeles
         options: [
-          { carrier: "Air Charter", route: "PVG -> ANC -> LAX", cost_delta: 4500, delay_h: 12 },
-          { carrier: "Ocean Freight", route: "Ningbo -> LAX", cost_delta: 500, delay_h: 48 }
+          { carrier: "Air Charter Express", route: "PVG -> ANC -> LAX", cost_delta: 4500, delay_h: 12, reliability: 0.98, sla_compliant: true },
+          { carrier: "Ocean Diversion (Busan Hub)", route: "CNSZX -> PUS -> USLAX", cost_delta: 2200, delay_h: 22, reliability: 0.92, sla_compliant: true },
+          { carrier: "Eurasian Intermodal Rail", route: "Chongqing -> Duisburg Rail -> Atlantic", cost_delta: 3800, delay_h: 18, reliability: 0.95, sla_compliant: true },
         ]
       });
     }
   }, [mapData]);
 
-  const origin = mapData?.origin_coords ? { lat: mapData.origin_coords[1], lng: mapData.origin_coords[0] } : null;
-  const destination = mapData?.dest_coords ? { lat: mapData.dest_coords[1], lng: mapData.dest_coords[0] } : null;
-  const disruption = mapData?.disruption_coords ? { lat: mapData.disruption_coords[1], lng: mapData.disruption_coords[0] } : null;
+  // Canvas dimensions and coordinate projection
+  const SVG_WIDTH = 960;
+  const SVG_HEIGHT = 520;
 
-  // Build Primary Route path (Origin -> Disruption -> Destination)
-  const primaryRoutePath: { lat: number; lng: number }[] = [];
-  if (origin && destination) {
-    primaryRoutePath.push(origin);
-    if (disruption) {
-      primaryRoutePath.push(disruption);
-    }
-    primaryRoutePath.push(destination);
-  }
+  // Projection math: converts [lng, lat] into canvas (x, y) coordinates
+  const projectCoords = useMemo(() => {
+    return (lng: number, lat: number): [number, number] => {
+      // Normalize longitude (-180 to 180 -> 0 to SVG_WIDTH)
+      let normLng = lng;
+      if (normLng > 180) normLng -= 360;
+      if (normLng < -180) normLng += 360;
 
-  // Build Reroute Alternative path from waypoints if available
-  let rerouteWaypoints: { lat: number; lng: number }[] = [];
-  if (mapData?.options?.[0]?.waypoints && mapData.options[0].waypoints.length > 0) {
-    rerouteWaypoints = mapData.options[0].waypoints.map((wp: [number, number]) => ({
-      lat: wp[1],
-      lng: wp[0]
-    }));
-  } else if (origin && destination) {
-    // Generate an offset mid-point arching north (e.g. Great Circle via Anchorage/Pacific Rim)
-    const midLat = (origin.lat + destination.lat) / 2 + 15;
-    const midLng = (origin.lng + destination.lng) / 2;
-    rerouteWaypoints = [{ lat: midLat, lng: midLng }];
-  }
+      const x = ((normLng + 180) / 360) * SVG_WIDTH;
+      // Mercator-like clipping [-80, 80] for aesthetic balance
+      const clampedLat = Math.max(-75, Math.min(80, lat));
+      const y = ((85 - clampedLat) / 160) * SVG_HEIGHT;
+      return [x, y];
+    };
+  }, [SVG_WIDTH, SVG_HEIGHT]);
 
-  const reroutePath: { lat: number; lng: number }[] = [];
-  if (origin && destination) {
-    reroutePath.push(origin);
-    reroutePath.push(...rerouteWaypoints);
-    reroutePath.push(destination);
-  }
+  // Generate SVG path for a coordinate polyline
+  const makePathData = (coords: number[][]) => {
+    if (!coords || coords.length === 0) return '';
+    return coords.reduce((acc, pt, idx) => {
+      const [x, y] = projectCoords(pt[0], pt[1]);
+      return idx === 0 ? `M ${x.toFixed(1)} ${y.toFixed(1)}` : `${acc} L ${x.toFixed(1)} ${y.toFixed(1)}`;
+    }, '');
+  };
+
+  // Pre-calculate origin, destination, and disruption positions
+  const originPos = mapData?.origin_coords ? projectCoords(mapData.origin_coords[0], mapData.origin_coords[1]) : null;
+  const destPos = mapData?.dest_coords ? projectCoords(mapData.dest_coords[0], mapData.dest_coords[1]) : null;
+  const disruptionPos = mapData?.disruption_coords ? projectCoords(mapData.disruption_coords[0], mapData.disruption_coords[1]) : null;
 
   return (
-    <div className="space-y-6 max-w-7xl mx-auto h-full flex flex-col font-sans">
-      {/* Top Banner Header */}
+    <div className="space-y-6 max-w-7xl mx-auto">
+      {/* Module Header */}
       <div className="flex flex-wrap items-center justify-between gap-4 border-b border-[#e5e1d8] pb-4 shrink-0">
         <div>
           <div className="flex items-center gap-2 text-xs font-mono font-bold text-[#c92a2a] uppercase tracking-wider mb-1">
             <Compass className="w-4 h-4 text-[#0f2b48]" />
-            <span>Autonomous Spatial Cartography</span>
+            <span>Geospatial Transit Corridors & Vector Grid</span>
           </div>
           <h2 className="font-display text-3xl font-bold uppercase tracking-tight text-[#111827]">
-            Geo Network & Chokepoint Routing
+            Tactical Network Operations
           </h2>
-          <p className="text-xs text-[#6b7280] font-sans mt-0.5">
-            Continuous Multi-Modal Satellite AIS/GPS Tracking & Disruption Bypass Engine via Google Maps
-          </p>
+          <div className="text-xs text-[#6b7280] font-sans mt-0.5">
+            Real-time multi-modal route projection, maritime lane monitoring, and autonomous corridor diversion engine
+          </div>
         </div>
 
-        <div className="flex items-center gap-2 font-mono text-xs">
-          <div className="px-3 py-1.5 rounded-md bg-[#15803d]/10 text-[#15803d] border border-[#15803d]/30 font-semibold flex items-center gap-2">
-            <span className="w-2 h-2 rounded-full bg-[#15803d] animate-pulse" />
-            <span>Google Maps Platform: Live Sync</span>
+        <div className="flex items-center gap-2.5">
+          <div className="flex items-center gap-2 px-3 py-1.5 rounded-md bg-white border border-[#e5e1d8] text-xs font-mono">
+            <span className="w-2 h-2 rounded-full bg-[#15803d] animate-pulse"></span>
+            <span className="font-bold text-[#0f2b48]">Vector Grid: Operational</span>
+          </div>
+          <div className="flex items-center gap-2 px-3 py-1.5 rounded-md bg-[#0f2b48] text-white text-xs font-mono font-bold shadow-xs">
+            <Activity className="w-3.5 h-3.5 text-[#38bdf8]" />
+            <span>1,818 Tracked Assets</span>
           </div>
         </div>
       </div>
 
-      {/* Main Container */}
-      <div className="flex-1 rounded-lg border border-[#e5e1d8] bg-white shadow-xs relative overflow-hidden flex flex-col md:flex-row min-h-[550px]">
-        {/* Map Area */}
-        <div className="flex-1 relative bg-white min-h-[400px]">
-          {/* Tactical Layer Controls */}
-          <div className="absolute top-4 right-4 z-20 bg-white/95 backdrop-blur-md border border-[#e5e1d8] rounded-md p-3 shadow-xs flex flex-col gap-2 min-w-[210px]">
-            <div className="text-[10px] text-[#111827] font-mono font-bold uppercase tracking-wider border-b border-[#f0ece3] pb-1.5 flex items-center justify-between">
-              <span className="flex items-center gap-1.5"><Layers className="w-3.5 h-3.5 text-[#0f2b48]" /> Map Controls</span>
-              <span className="text-[9px] text-[#6b7280]">GMP v3</span>
-            </div>
-
-            {/* Map Mode Selector */}
-            <div className="grid grid-cols-2 gap-1 text-[10px] font-mono font-bold">
-              {(['roadmap', 'satellite', 'hybrid', 'terrain'] as const).map(type => (
-                <button
-                  key={type}
-                  onClick={() => setMapType(type)}
-                  className={`px-2 py-1 rounded uppercase tracking-wider border transition-colors cursor-pointer ${
-                    mapType === type
-                      ? 'border-[#0f2b48] bg-[#0f2b48] text-white shadow-xs'
-                      : 'border-[#e5e1d8] bg-white text-[#6b7280] hover:text-[#0f2b48]'
-                  }`}
-                >
-                  {type}
-                </button>
-              ))}
-            </div>
-
-            <div className="border-t border-[#f0ece3] pt-2 flex flex-col gap-1 font-mono text-xs">
-              <button
-                onClick={() => setActiveLayers(prev => ({ ...prev, rail: !prev.rail }))}
-                className={`flex items-center justify-between px-2 py-1.5 rounded transition-colors border cursor-pointer font-bold ${
-                  activeLayers.rail ? 'border-[#b45309]/30 bg-[#b45309]/10 text-[#b45309]' : 'border-transparent text-[#6b7280] hover:bg-stone-100'
-                }`}
+      {/* Main Tactical Map Frame */}
+      <div className="rounded-lg border border-[#e5e1d8] bg-white shadow-xs overflow-hidden">
+        {/* Map Header Toolbar */}
+        <div className="p-3 border-b border-[#e5e1d8] bg-[#fbfaf7] flex flex-wrap items-center justify-between gap-3 text-xs font-mono">
+          <div className="flex items-center gap-2">
+            <span className="font-bold text-[#0f2b48] flex items-center gap-1.5">
+              <Globe2 className="w-4 h-4 text-[#0f2b48]" /> View Corridor:
+            </span>
+            <div className="flex rounded-md border border-[#e5e1d8] bg-white p-0.5">
+              <button 
+                onClick={() => setViewPreset('global')}
+                className={`px-2.5 py-1 rounded transition-colors ${viewPreset === 'global' ? 'bg-[#0f2b48] text-white font-bold' : 'text-stone-600 hover:bg-stone-50'}`}
               >
-                <div className="flex items-center gap-2"><Train className="w-3.5 h-3.5" /> Rail / Transit</div>
-                {activeLayers.rail && <span className="w-1.5 h-1.5 rounded-full bg-[#b45309] animate-pulse"></span>}
+                Global Grid
               </button>
-
-              <button
-                onClick={() => setActiveLayers(prev => ({ ...prev, traffic: !prev.traffic }))}
-                className={`flex items-center justify-between px-2 py-1.5 rounded transition-colors border cursor-pointer font-bold ${
-                  activeLayers.traffic ? 'border-[#c92a2a]/30 bg-[#c92a2a]/10 text-[#c92a2a]' : 'border-transparent text-[#6b7280] hover:bg-stone-100'
-                }`}
+              <button 
+                onClick={() => setViewPreset('transpacific')}
+                className={`px-2.5 py-1 rounded transition-colors ${viewPreset === 'transpacific' ? 'bg-[#0f2b48] text-white font-bold' : 'text-stone-600 hover:bg-stone-50'}`}
               >
-                <div className="flex items-center gap-2"><Car className="w-3.5 h-3.5" /> Live Traffic</div>
-                {activeLayers.traffic && <span className="w-1.5 h-1.5 rounded-full bg-[#c92a2a] animate-pulse"></span>}
+                Transpacific
               </button>
-
-              <button
-                onClick={() => setActiveLayers(prev => ({ ...prev, wms: !prev.wms }))}
-                className={`flex items-center justify-between px-2 py-1.5 rounded transition-colors border cursor-pointer font-bold ${
-                  activeLayers.wms ? 'border-[#0f2b48]/30 bg-[#0f2b48]/10 text-[#0f2b48]' : 'border-transparent text-[#6b7280] hover:bg-stone-100'
-                }`}
+              <button 
+                onClick={() => setViewPreset('asia-europe')}
+                className={`px-2.5 py-1 rounded transition-colors ${viewPreset === 'asia-europe' ? 'bg-[#0f2b48] text-white font-bold' : 'text-stone-600 hover:bg-stone-50'}`}
               >
-                <div className="flex items-center gap-2"><Radio className="w-3.5 h-3.5" /> WMS Facilities</div>
-                {activeLayers.wms && <span className="w-1.5 h-1.5 rounded-full bg-[#0f2b48] animate-pulse"></span>}
+                Asia-Europe
+              </button>
+              <button 
+                onClick={() => setViewPreset('americas')}
+                className={`px-2.5 py-1 rounded transition-colors ${viewPreset === 'americas' ? 'bg-[#0f2b48] text-white font-bold' : 'text-stone-600 hover:bg-stone-50'}`}
+              >
+                Americas
               </button>
             </div>
           </div>
 
-          {/* Google Maps Viewport */}
-          <APIProvider apiKey={apiKey} language="en" region="US">
-            <GoogleMap
-              style={{ width: '100%', height: '100%' }}
-              defaultCenter={{ lat: 25, lng: 0 }}
-              defaultZoom={2}
-              gestureHandling="greedy"
-              mapId="DEMO_MAP_ID"
-              mapTypeId={mapType}
-              disableDefaultUI={false}
-              zoomControl={true}
-              mapTypeControl={false}
-              streetViewControl={false}
-              internalUsageAttributionIds={['gmp_mcp_codeassist_v1_aistudio']}
+          {/* Tactical Layer Toggles */}
+          <div className="flex items-center gap-2 flex-wrap">
+            <span className="text-[#6b7280]">Layers:</span>
+            <button
+              onClick={() => setActiveLayers(l => ({ ...l, maritime: !l.maritime }))}
+              className={`flex items-center gap-1.5 px-2.5 py-1 rounded border transition-colors cursor-pointer ${
+                activeLayers.maritime ? 'bg-[#0284c7]/10 text-[#0284c7] border-[#0284c7]/30 font-bold' : 'bg-white text-stone-500 border-[#e5e1d8]'
+              }`}
             >
-              <TacticalLayers rail={activeLayers.rail} traffic={activeLayers.traffic} />
-              <MapBoundsUpdater mapData={mapData} />
+              <Ship className="w-3 h-3" /> Maritime Corridors
+            </button>
+            <button
+              onClick={() => setActiveLayers(l => ({ ...l, rail: !l.rail }))}
+              className={`flex items-center gap-1.5 px-2.5 py-1 rounded border transition-colors cursor-pointer ${
+                activeLayers.rail ? 'bg-[#ca8a04]/10 text-[#a16207] border-[#ca8a04]/30 font-bold' : 'bg-white text-stone-500 border-[#e5e1d8]'
+              }`}
+            >
+              <Train className="w-3 h-3" /> Eurasian Rail
+            </button>
+            <button
+              onClick={() => setActiveLayers(l => ({ ...l, wms: !l.wms }))}
+              className={`flex items-center gap-1.5 px-2.5 py-1 rounded border transition-colors cursor-pointer ${
+                activeLayers.wms ? 'bg-[#15803d]/10 text-[#15803d] border-[#15803d]/30 font-bold' : 'bg-white text-stone-500 border-[#e5e1d8]'
+              }`}
+            >
+              <Anchor className="w-3 h-3" /> WMS Nodes ({wmsNodes.length})
+            </button>
+            <button
+              onClick={() => setActiveLayers(l => ({ ...l, chokepoints: !l.chokepoints }))}
+              className={`flex items-center gap-1.5 px-2.5 py-1 rounded border transition-colors cursor-pointer ${
+                activeLayers.chokepoints ? 'bg-[#c92a2a]/10 text-[#c92a2a] border-[#c92a2a]/30 font-bold' : 'bg-white text-stone-500 border-[#e5e1d8]'
+              }`}
+            >
+              <AlertTriangle className="w-3 h-3" /> Strategic Chokepoints
+            </button>
+          </div>
+        </div>
 
-              {/* Primary Route Geodesic Polyline */}
-              {primaryRoutePath.length >= 2 && (
-                <Polyline
-                  path={primaryRoutePath}
-                  strokeColor="#1a4c8a"
-                  strokeWeight={3}
-                  strokeOpacity={0.85}
-                  geodesic={true}
+        {/* Interactive Tactical SVG Map Canvas */}
+        <div className="relative w-full bg-[#0b1928] overflow-hidden select-none" style={{ minHeight: '520px' }}>
+          <svg
+            viewBox={`0 0 ${SVG_WIDTH} ${SVG_HEIGHT}`}
+            className="w-full h-full block"
+            preserveAspectRatio="xMidYMid meet"
+          >
+            <defs>
+              {/* Radial glow for disruptions */}
+              <radialGradient id="disruptionGlow" cx="50%" cy="50%" r="50%">
+                <stop offset="0%" stopColor="#ef4444" stopOpacity="0.8" />
+                <stop offset="60%" stopColor="#ef4444" stopOpacity="0.2" />
+                <stop offset="100%" stopColor="#ef4444" stopOpacity="0" />
+              </radialGradient>
+              {/* Linear gradient for reroute vector arc */}
+              <linearGradient id="routeGradient" x1="0%" y1="0%" x2="100%" y2="0%">
+                <stop offset="0%" stopColor="#10b981" />
+                <stop offset="50%" stopColor="#38bdf8" />
+                <stop offset="100%" stopColor="#818cf8" />
+              </linearGradient>
+              <filter id="glowEffect" x="-20%" y="-20%" width="140%" height="140%">
+                <feGaussianBlur stdDeviation="3" result="blur" />
+                <feComposite in="SourceGraphic" in2="blur" operator="over" />
+              </filter>
+            </defs>
+
+            {/* Background Grid Lines (Equator, Tropics, Parallels, Meridians) */}
+            <g stroke="#1e293b" strokeWidth="0.75" strokeDasharray="3,3" opacity="0.6">
+              {/* Meridians every 45 deg */}
+              {[45, 90, 135, 180, 225, 270, 315].map(deg => {
+                const x = (deg / 360) * SVG_WIDTH;
+                return <line key={`meridian-${deg}`} x1={x} y1={0} x2={x} y2={SVG_HEIGHT} />;
+              })}
+              {/* Parallels (Equator, Tropics, Arctic) */}
+              {[0.2, 0.35, 0.5, 0.65, 0.8].map((ratio, i) => (
+                <line 
+                  key={`par-${i}`} 
+                  x1={0} 
+                  y1={ratio * SVG_HEIGHT} 
+                  x2={SVG_WIDTH} 
+                  y2={ratio * SVG_HEIGHT} 
+                  stroke={ratio === 0.5 ? '#334155' : '#1e293b'} 
+                  strokeWidth={ratio === 0.5 ? '1' : '0.75'}
+                  strokeDasharray={ratio === 0.5 ? 'none' : '3,3'}
                 />
-              )}
+              ))}
+            </g>
 
-              {/* Rerouted Alternative Geodesic Polyline */}
-              {reroutePath.length >= 2 && (
-                <Polyline
-                  path={reroutePath}
-                  strokeColor="#228b22"
-                  strokeWeight={4}
-                  strokeOpacity={0.9}
-                  geodesic={true}
+            {/* Stylized Continents / Regional Landmass Vector Silhouettes */}
+            <g fill="#132338" stroke="#1e3a5f" strokeWidth="0.75" opacity="0.85">
+              {/* North America */}
+              <path d="M 120 70 L 190 60 L 260 70 L 290 110 L 240 180 L 210 240 L 170 230 L 130 180 L 80 120 Z" />
+              {/* South America */}
+              <path d="M 230 250 L 280 270 L 310 330 L 270 420 L 240 430 L 220 340 Z" />
+              {/* Europe */}
+              <path d="M 450 70 L 520 60 L 540 110 L 490 140 L 440 130 L 430 90 Z" />
+              {/* Africa */}
+              <path d="M 440 150 L 530 150 L 560 220 L 540 330 L 490 380 L 440 280 L 420 190 Z" />
+              {/* Asia & Siberia */}
+              <path d="M 530 60 L 780 50 L 850 110 L 820 180 L 760 220 L 700 240 L 640 210 L 550 120 Z" />
+              {/* South East Asia & Indonesia */}
+              <path d="M 700 250 L 740 260 L 780 300 L 730 320 L 690 280 Z" />
+              {/* Australia */}
+              <path d="M 760 340 L 840 330 L 860 400 L 790 420 L 750 380 Z" />
+            </g>
+
+            {/* Layer: Maritime Shipping Corridors */}
+            {activeLayers.maritime && (
+              <g stroke="#0284c7" strokeWidth="1.5" strokeDasharray="4,4" opacity="0.65">
+                {MARITIME_CORRIDORS.filter(c => c.id !== 'ER-1').map(corridor => (
+                  <path key={corridor.id} d={makePathData(corridor.points)} fill="none" />
+                ))}
+              </g>
+            )}
+
+            {/* Layer: Eurasian Rail Corridor */}
+            {activeLayers.rail && (
+              <g stroke="#eab308" strokeWidth="2" strokeDasharray="6,3" opacity="0.75">
+                {MARITIME_CORRIDORS.filter(c => c.id === 'ER-1').map(corridor => (
+                  <path key={corridor.id} d={makePathData(corridor.points)} fill="none" />
+                ))}
+              </g>
+            )}
+
+            {/* Active Mission: Original Disrupted Route Line */}
+            {originPos && destPos && (
+              <g>
+                <path
+                  d={`M ${originPos[0]} ${originPos[1]} Q ${(originPos[0] + destPos[0]) / 2} ${Math.min(originPos[1], destPos[1]) - 60} ${destPos[0]} ${destPos[1]}`}
+                  fill="none"
+                  stroke="#ef4444"
+                  strokeWidth="2"
+                  strokeDasharray="5,5"
+                  opacity="0.8"
                 />
-              )}
+              </g>
+            )}
 
-              {/* Origin Marker */}
-              {origin && (
-                <AdvancedMarker
-                  position={origin}
-                  title="Origin Terminal"
-                  onClick={() => setSelectedInfo({
-                    type: 'origin',
-                    position: origin,
-                    title: 'Origin Terminal',
-                    details: {
-                      Coordinates: `${origin.lat.toFixed(4)}, ${origin.lng.toFixed(4)}`,
-                      Status: 'Departed / En Route'
-                    }
-                  })}
-                >
-                  <Pin background="#1a4c8a" glyphColor="#ffffff" borderColor="#1a1a1a" />
-                </AdvancedMarker>
-              )}
+            {/* Active Mission: Autonomous Optimal Diversion Corridor */}
+            {originPos && destPos && (
+              <g>
+                {/* Glow underlay */}
+                <path
+                  d={`M ${originPos[0]} ${originPos[1]} Q ${(originPos[0] + destPos[0]) / 2} ${Math.min(originPos[1], destPos[1]) - 110} ${destPos[0]} ${destPos[1]}`}
+                  fill="none"
+                  stroke="url(#routeGradient)"
+                  strokeWidth="3.5"
+                  filter="url(#glowEffect)"
+                  className="animate-pulse"
+                />
+                {/* Solid core line */}
+                <path
+                  d={`M ${originPos[0]} ${originPos[1]} Q ${(originPos[0] + destPos[0]) / 2} ${Math.min(originPos[1], destPos[1]) - 110} ${destPos[0]} ${destPos[1]}`}
+                  fill="none"
+                  stroke="#ffffff"
+                  strokeWidth="1.5"
+                />
+              </g>
+            )}
 
-              {/* Destination Marker */}
-              {destination && (
-                <AdvancedMarker
-                  position={destination}
-                  title="Destination Facility"
-                  onClick={() => setSelectedInfo({
-                    type: 'destination',
-                    position: destination,
-                    title: 'Destination Terminal',
-                    details: {
-                      Coordinates: `${destination.lat.toFixed(4)}, ${destination.lng.toFixed(4)}`,
-                      Status: 'Scheduled Delivery Port'
-                    }
-                  })}
-                >
-                  <Pin background="#1a4c8a" glyphColor="#ffffff" borderColor="#1a1a1a" />
-                </AdvancedMarker>
-              )}
-
-              {/* Disruption Marker */}
-              {disruption && (
-                <AdvancedMarker
-                  position={disruption}
-                  title="Active Disruption Zone"
+            {/* Strategic Chokepoints */}
+            {activeLayers.chokepoints && CHOKEPOINTS.map((cp, idx) => {
+              const [cx, cy] = projectCoords(cp.coords[0], cp.coords[1]);
+              return (
+                <g 
+                  key={`choke-${idx}`} 
+                  className="cursor-pointer group"
                   onClick={() => setSelectedInfo({
                     type: 'disruption',
-                    position: disruption,
-                    title: 'Disruption Bottleneck',
+                    position: { lat: cp.coords[1], lng: cp.coords[0] },
+                    title: `Strategic Chokepoint: ${cp.name}`,
                     details: {
-                      Coordinates: `${disruption.lat.toFixed(4)}, ${disruption.lng.toFixed(4)}`,
-                      Severity: 'CRITICAL',
-                      Action: 'Rerouting in Progress'
+                      Risk_Level: cp.risk,
+                      Classification: cp.type,
+                      Coordinates: `${cp.coords[1]}°N, ${cp.coords[0]}°E`,
+                      Surveillance: 'Continuous Naval AIS Sync'
                     }
                   })}
                 >
-                  <div className="relative flex items-center justify-center cursor-pointer">
-                    <span className="animate-ping absolute inline-flex h-8 w-8 rounded-full bg-[#da312e] opacity-75"></span>
-                    <div className="relative border-2 border-[#1a1a1a] bg-[#da312e] text-white px-2 py-1 shadow-md flex items-center gap-1 paper-edge">
-                      <AlertTriangle className="w-3.5 h-3.5 text-white animate-bounce" />
-                      <span className="font-mono text-[9px] font-bold uppercase tracking-wider">DISRUPTION</span>
-                    </div>
-                  </div>
-                </AdvancedMarker>
-              )}
+                  <circle cx={cx} cy={cy} r="5" fill="#f59e0b" opacity="0.3" className="animate-ping" />
+                  <circle cx={cx} cy={cy} r="3" fill="#f59e0b" stroke="#ffffff" strokeWidth="1" />
+                  <text 
+                    x={cx + 6} 
+                    y={cy + 3} 
+                    fill="#fef08a" 
+                    fontSize="9" 
+                    fontFamily="monospace"
+                    className="opacity-70 group-hover:opacity-100 transition-opacity"
+                  >
+                    {cp.name}
+                  </text>
+                </g>
+              );
+            })}
 
-              {/* Waypoint Markers */}
-              {rerouteWaypoints.map((wp, idx) => (
-                <AdvancedMarker
-                  key={`reroute-wp-${idx}`}
-                  position={wp}
-                  title={`Reroute Waypoint ${idx + 1}`}
-                  onClick={() => setSelectedInfo({
-                    type: 'waypoint',
-                    position: wp,
-                    title: `Reroute Waypoint #${idx + 1}`,
-                    details: {
-                      Coordinates: `${wp.lat.toFixed(4)}, ${wp.lng.toFixed(4)}`,
-                      Designation: 'Bypass Navigation Hub'
-                    }
-                  })}
-                >
-                  <Pin background="#228b22" glyphColor="#ffffff" borderColor="#1a1a1a" scale={0.85} />
-                </AdvancedMarker>
-              ))}
+            {/* Layer: WMS Nodes / Global Facilities */}
+            {activeLayers.wms && wmsNodes.map((node) => {
+              const [nx, ny] = projectCoords(node.lng, node.lat);
+              const isWarning = node.status === 'warning' || node.capacity_pct >= 75;
+              const isCritical = node.status === 'critical' || node.capacity_pct >= 90;
+              const nodeColor = isCritical ? '#ef4444' : isWarning ? '#f59e0b' : '#10b981';
 
-              {/* WMS Node Markers */}
-              {activeLayers.wms && wmsNodes && wmsNodes.map((node: any) => (
-                <AdvancedMarker
-                  key={node.id}
-                  position={{ lat: node.lat, lng: node.lng }}
-                  title={`${node.id} - ${node.name}`}
+              return (
+                <g 
+                  key={node.id} 
+                  className="cursor-pointer group"
                   onClick={() => setSelectedInfo({
                     type: 'wms',
                     position: { lat: node.lat, lng: node.lng },
-                    title: `${node.id}: ${node.name}`,
+                    title: `${node.name} (${node.id})`,
                     details: {
-                      Region: `${node.region} (Tier ${node.tier})`,
-                      Capacity: `${node.capacity_pct}%`,
-                      Docks: `${node.active_docks} / ${node.total_docks} active`,
-                      Inbound: `${node.inbound_shipments} shipments`,
+                      Region: node.region,
+                      Tier: `Tier ${node.tier}`,
+                      Utilization: `${node.capacity_pct}% Capacity`,
+                      Dock_Slots: `${node.active_docks} / ${node.total_docks} Active`,
+                      Inbound_Demand: `${node.inbound_shipments} Shipments`,
                       Status: node.status.toUpperCase()
                     }
                   })}
                 >
-                  <div
-                    className={`w-3.5 h-3.5 rounded-full border-2 border-[#1a1a1a] shadow-xs cursor-pointer transition-transform hover:scale-150 ${
-                      node.capacity_pct >= 90 ? 'bg-[#da312e] animate-pulse' : node.capacity_pct >= 80 ? 'bg-[#b45309]' : 'bg-[#1a4c8a]'
-                    }`}
-                  />
-                </AdvancedMarker>
-              ))}
+                  <circle cx={nx} cy={ny} r={node.tier === 1 ? '5' : '3.5'} fill={nodeColor} stroke="#ffffff" strokeWidth="1" />
+                  <text 
+                    x={nx + 6} 
+                    y={ny + 3} 
+                    fill="#94a3b8" 
+                    fontSize="8.5" 
+                    fontFamily="monospace" 
+                    className="opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none"
+                  >
+                    {node.name.split(' ')[0]} ({node.capacity_pct}%)
+                  </text>
+                </g>
+              );
+            })}
 
-              {/* InfoWindow on Selected Entity */}
-              {selectedInfo && (
-                <InfoWindow
-                  position={selectedInfo.position}
-                  onCloseClick={() => setSelectedInfo(null)}
+            {/* Active Disruption Event */}
+            {disruptionPos && (
+              <g 
+                className="cursor-pointer"
+                onClick={() => setSelectedInfo({
+                  type: 'disruption',
+                  position: { lat: mapData.disruption_coords[1], lng: mapData.disruption_coords[0] },
+                  title: 'Active Detected Disruption',
+                  details: {
+                    Type: 'High Severity Anomaly',
+                    Location: `${mapData.disruption_coords[1]}°N, ${mapData.disruption_coords[0]}°E`,
+                    Impact: 'Corridor Capacity Choked',
+                    Resolution: 'Autonomous Diversion Plan Active'
+                  }
+                })}
+              >
+                <circle cx={disruptionPos[0]} cy={disruptionPos[1]} r="24" fill="url(#disruptionGlow)" />
+                <circle cx={disruptionPos[0]} cy={disruptionPos[1]} r="7" fill="#ef4444" stroke="#ffffff" strokeWidth="2" />
+                <text 
+                  x={disruptionPos[0]} 
+                  y={disruptionPos[1] - 12} 
+                  fill="#fca5a5" 
+                  fontSize="10" 
+                  fontWeight="bold"
+                  fontFamily="monospace" 
+                  textAnchor="middle"
                 >
-                  <div className="font-mono p-1 text-xs text-[#1a1a1a] max-w-[220px]">
-                    <div className="font-bold border-b-2 border-dashed border-[#d5d1c8] pb-1 mb-2 text-[#1a4c8a] flex items-center justify-between">
-                      <span>{selectedInfo.title}</span>
-                    </div>
-                    {selectedInfo.details && (
-                      <div className="space-y-1 text-[11px]">
-                        {Object.entries(selectedInfo.details).map(([k, v]) => (
-                          <div key={k} className="flex justify-between gap-2">
-                            <span className="text-[#666] font-semibold">{k}:</span>
-                            <span className="font-bold text-[#1a1a1a] text-right">{v}</span>
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                </InfoWindow>
-              )}
-            </GoogleMap>
-          </APIProvider>
+                  DISRUPTION ZONE
+                </text>
+              </g>
+            )}
 
-          {/* Map Legend */}
-          <div className="absolute bottom-6 left-6 z-20 bg-white/95 backdrop-blur-md border border-[#e5e1d8] rounded-md p-3 font-mono text-[11px] space-y-2 shadow-xs pointer-events-none">
-            <div className="text-[10px] text-[#6b7280] font-bold uppercase tracking-wider border-b border-[#f0ece3] pb-1">Cartographic Legend</div>
-            <div className="flex items-center gap-2.5">
-              <span className="w-4 h-1 bg-[#0f2b48] rounded"></span>
-              <span className="text-[#111827]">Primary Route (Geodesic)</span>
+            {/* Origin Port Pin */}
+            {originPos && (
+              <g 
+                className="cursor-pointer"
+                onClick={() => setSelectedInfo({
+                  type: 'origin',
+                  position: { lat: mapData.origin_coords[1], lng: mapData.origin_coords[0] },
+                  title: 'Departure Origin Hub',
+                  details: {
+                    Hub: 'Shenzhen / Shanghai Maritime Gateway',
+                    Status: 'DISPATCHED',
+                    Vessel_Manifest: 'Tier-1 Contract Bound'
+                  }
+                })}
+              >
+                <circle cx={originPos[0]} cy={originPos[1]} r="6" fill="#38bdf8" stroke="#ffffff" strokeWidth="2" />
+                <text x={originPos[0]} y={originPos[1] + 16} fill="#7dd3fc" fontSize="9.5" fontWeight="bold" fontFamily="monospace" textAnchor="middle">
+                  ORIGIN
+                </text>
+              </g>
+            )}
+
+            {/* Destination Port Pin */}
+            {destPos && (
+              <g 
+                className="cursor-pointer"
+                onClick={() => setSelectedInfo({
+                  type: 'destination',
+                  position: { lat: mapData.dest_coords[1], lng: mapData.dest_coords[0] },
+                  title: 'Destination Terminal',
+                  details: {
+                    Hub: 'Port of Los Angeles / Long Beach Gateway',
+                    Status: 'INBOUND RESERVATION',
+                    SLA_Target: 'Zero Penalty Threshold'
+                  }
+                })}
+              >
+                <circle cx={destPos[0]} cy={destPos[1]} r="6" fill="#10b981" stroke="#ffffff" strokeWidth="2" />
+                <text x={destPos[0]} y={destPos[1] + 16} fill="#6ee7b7" fontSize="9.5" fontWeight="bold" fontFamily="monospace" textAnchor="middle">
+                  DESTINATION
+                </text>
+              </g>
+            )}
+          </svg>
+
+          {/* Interactive Info Window / Overlay Card when an item is selected */}
+          {selectedInfo && (
+            <div className="absolute top-4 right-4 max-w-sm w-80 bg-white/95 backdrop-blur-md rounded-lg border border-[#e5e1d8] p-4 shadow-lg text-[#111827] z-30 font-sans">
+              <div className="flex items-start justify-between gap-2 border-b border-[#e5e1d8] pb-2 mb-3">
+                <div className="flex items-center gap-2">
+                  <div className="w-6 h-6 rounded bg-[#0f2b48] text-white flex items-center justify-center font-bold text-xs">
+                    {selectedInfo.type === 'disruption' ? '!' : 'SG'}
+                  </div>
+                  <div>
+                    <h4 className="font-display font-bold text-xs uppercase text-[#111827] leading-tight">
+                      {selectedInfo.title}
+                    </h4>
+                    <span className="text-[10px] text-[#6b7280] font-mono">
+                      {selectedInfo.position.lat.toFixed(2)}°N, {selectedInfo.position.lng.toFixed(2)}°E
+                    </span>
+                  </div>
+                </div>
+                <button 
+                  onClick={() => setSelectedInfo(null)}
+                  className="text-stone-400 hover:text-stone-800 text-xs font-mono font-bold cursor-pointer"
+                >
+                  ✕
+                </button>
+              </div>
+
+              {selectedInfo.details && (
+                <div className="space-y-1.5 text-xs font-mono">
+                  {Object.entries(selectedInfo.details).map(([key, val]) => (
+                    <div key={key} className="flex justify-between items-center text-[11px] py-0.5 border-b border-stone-100">
+                      <span className="text-[#6b7280]">{key.replace('_', ' ')}:</span>
+                      <span className="font-semibold text-[#0f2b48]">{String(val)}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
-            <div className="flex items-center gap-2.5">
-              <span className="w-4 h-1 bg-[#15803d] rounded"></span>
-              <span className="text-[#111827]">Approved Diverted Path</span>
+          )}
+
+          {/* Canvas Bottom Legend Strip */}
+          <div className="absolute bottom-3 left-3 right-3 flex flex-wrap items-center justify-between gap-2 px-3 py-2 rounded-md bg-[#0b1928]/90 border border-slate-700/80 text-[11px] font-mono text-slate-300 backdrop-blur-sm">
+            <div className="flex items-center gap-4 flex-wrap">
+              <span className="flex items-center gap-1.5">
+                <span className="w-2.5 h-2.5 rounded-full bg-[#38bdf8] border border-white"></span>
+                <span>Origin</span>
+              </span>
+              <span className="flex items-center gap-1.5">
+                <span className="w-2.5 h-2.5 rounded-full bg-[#10b981] border border-white"></span>
+                <span>Destination</span>
+              </span>
+              <span className="flex items-center gap-1.5">
+                <span className="w-2.5 h-2.5 rounded-full bg-[#ef4444] border border-white animate-pulse"></span>
+                <span>Disruption Zone</span>
+              </span>
+              <span className="flex items-center gap-1.5">
+                <span className="w-4 h-0.5 bg-gradient-to-r from-emerald-400 to-sky-400"></span>
+                <span>Optimal Diversion</span>
+              </span>
+              <span className="flex items-center gap-1.5">
+                <span className="w-2.5 h-2.5 rounded-full bg-[#10b981]"></span>
+                <span>WMS Hub (Optimal)</span>
+              </span>
+              <span className="flex items-center gap-1.5">
+                <span className="w-2.5 h-2.5 rounded-full bg-[#ef4444]"></span>
+                <span>WMS Hub (Critical)</span>
+              </span>
             </div>
-            <div className="flex items-center gap-2.5">
-              <span className="w-2.5 h-2.5 rounded-full bg-[#c92a2a] animate-pulse"></span>
-              <span className="text-[#111827]">Disruption Chokepoint</span>
-            </div>
-            <div className="flex items-center gap-2.5">
-              <span className="w-2.5 h-2.5 rounded-full bg-[#0f2b48]"></span>
-              <span className="text-[#111827]">WMS Gateway Buffer Node</span>
+            <div className="text-slate-400 hidden sm:block">
+              Click any node for real-time telemetry
             </div>
           </div>
         </div>
+      </div>
 
-        {/* Side Panel: Route Analysis */}
-        <div className="w-full md:w-80 border-t md:border-t-0 md:border-l border-[#e5e1d8] bg-[#fbfaf7] p-5 flex flex-col overflow-y-auto shrink-0 font-mono text-xs">
-          <div className="flex items-center gap-2 border-b border-[#e5e1d8] pb-3 mb-4">
-            <Navigation className="w-4 h-4 text-[#0f2b48]" />
-            <h3 className="font-display font-bold uppercase tracking-wider text-[#111827] text-xs">
-              Corridor Vector Analysis
-            </h3>
+      {/* Vector Corridor Breakdown & Comparative Analysis Table */}
+      <div className="rounded-lg border border-[#e5e1d8] bg-white p-6 shadow-xs space-y-4">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <Navigation className="w-5 h-5 text-[#0f2b48]" />
+            <div>
+              <h3 className="font-display font-bold text-lg text-[#111827]">
+                Evaluated Diversion Corridors & Cost Vectors
+              </h3>
+              <p className="text-xs text-[#6b7280]">
+                Autonomous routing choices scored against Gatekeeper constraints ($5,000 cost delta / 24h delay ceiling)
+              </p>
+            </div>
           </div>
+          <span className="text-xs font-mono font-bold text-[#15803d] px-2.5 py-1 rounded bg-[#15803d]/10">
+            3 Vectors Computed
+          </span>
+        </div>
 
-          {!mapData ? (
-            <div className="flex-1 flex items-center justify-center text-[#6b7280] font-bold uppercase tracking-wider text-xs text-center">
-              Awaiting Disruption Coordinates
-            </div>
-          ) : (
-            <div className="space-y-4">
-              {Array.isArray(mapData.disruption_coords) && (
-                <div className="p-3.5 rounded-md bg-[#c92a2a]/10 border border-[#c92a2a]/20">
-                  <div className="text-[11px] text-[#c92a2a] font-bold uppercase tracking-wider mb-1 flex items-center gap-1.5">
-                    <AlertTriangle className="w-3.5 h-3.5" /> Compromised Zone
-                  </div>
-                  <div className="text-xs text-[#111827] font-semibold">
-                    LAT: {mapData.disruption_coords[1]?.toFixed(4)}° N<br/>
-                    LNG: {mapData.disruption_coords[0]?.toFixed(4)}° E
-                  </div>
-                </div>
-              )}
-
-              {mapData.options && mapData.options.length > 0 && mapData.options[0] && (
-                <div className="p-4 rounded-md bg-white border border-[#e5e1d8] shadow-xs space-y-2">
-                  <div className="text-[11px] text-[#15803d] font-bold uppercase tracking-wider border-b border-[#f0ece3] pb-1.5 flex justify-between items-center">
-                    <span>Approved Bypass Corridor</span>
-                    <span className="px-1.5 py-0.5 rounded bg-[#15803d]/10 text-[10px]">OPTIMAL</span>
-                  </div>
-                  
-                  <div className="space-y-1.5 text-xs">
-                    <div><span className="text-[#6b7280]">Carrier:</span> <span className="text-[#111827] font-bold">{mapData.options[0].carrier}</span></div>
-                    <div><span className="text-[#6b7280]">Routing:</span> <span className="text-[#0f2b48] font-bold">{mapData.options[0].route}</span></div>
-                    <div className="flex justify-between pt-2 border-t border-[#f0ece3]">
-                      <span className="text-[#15803d] font-bold">+{mapData.options[0].delay_h}h Delay</span>
-                      <span className="text-[#0f2b48] font-bold">+${mapData.options[0].cost_delta} USD</span>
-                    </div>
-                  </div>
-                </div>
-              )}
-
-              {/* Active Network Summary */}
-              <div className="p-4 rounded-md bg-white border border-[#e5e1d8] shadow-xs space-y-2 text-xs">
-                <div className="font-bold uppercase tracking-wider text-[#0f2b48] border-b border-[#f0ece3] pb-1.5 flex items-center gap-1.5">
-                  <Compass className="w-3.5 h-3.5" /> Global Spatial Grid
-                </div>
-                <div className="flex justify-between text-[#6b7280]">
-                  <span>Active WMS Hubs:</span>
-                  <span className="font-bold text-[#111827]">{wmsNodes.length}</span>
-                </div>
-                <div className="flex justify-between text-[#6b7280]">
-                  <span>Saturated (&gt;90%):</span>
-                  <span className="font-bold text-[#c92a2a]">
-                    {wmsNodes.filter((n: any) => n.capacity_pct >= 90).length} Nodes
-                  </span>
-                </div>
-                <div className="flex justify-between text-[#6b7280]">
-                  <span>Safe Buffer (&lt;75%):</span>
-                  <span className="font-bold text-[#15803d]">
-                    {wmsNodes.filter((n: any) => n.capacity_pct < 75).length} Nodes
-                  </span>
-                </div>
-              </div>
-            </div>
-          )}
+        <div className="overflow-x-auto">
+          <table className="w-full text-left text-xs font-mono">
+            <thead className="bg-[#fbfaf7] border-y border-[#e5e1d8] text-[#6b7280] uppercase tracking-wider">
+              <tr>
+                <th className="py-2.5 px-3">Carrier / Route Strategy</th>
+                <th className="py-2.5 px-3">Mode</th>
+                <th className="py-2.5 px-3">Cost Delta</th>
+                <th className="py-2.5 px-3">Delay Impact</th>
+                <th className="py-2.5 px-3">Reliability Index</th>
+                <th className="py-2.5 px-3">SLA Status</th>
+                <th className="py-2.5 px-3 text-right">Gatekeeper Status</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-[#e5e1d8]">
+              {mapData?.options?.map((opt: any, index: number) => {
+                const isCompliant = opt.cost_delta <= 5000 && opt.delay_h <= 24;
+                return (
+                  <tr key={index} className="hover:bg-[#fbfaf7] transition-colors">
+                    <td className="py-3 px-3">
+                      <div className="font-bold text-[#111827]">{opt.carrier}</div>
+                      <div className="text-[11px] text-[#6b7280] font-sans">{opt.route}</div>
+                    </td>
+                    <td className="py-3 px-3">
+                      <span className="px-2 py-0.5 rounded text-[10px] bg-stone-100 text-stone-700 font-semibold">
+                        {opt.carrier?.toLowerCase().includes('air') ? 'Air Cargo' : opt.carrier?.toLowerCase().includes('rail') ? 'Intermodal Rail' : 'Ocean Express'}
+                      </span>
+                    </td>
+                    <td className="py-3 px-3 font-semibold text-[#111827]">
+                      +${(opt.cost_delta || 0).toLocaleString()} USD
+                    </td>
+                    <td className="py-3 px-3">
+                      <span className={(opt.delay_h || 0) <= 14 ? 'text-[#15803d] font-bold' : 'text-[#b45309] font-bold'}>
+                        +{opt.delay_h || 0} Hours
+                      </span>
+                    </td>
+                    <td className="py-3 px-3">
+                      <div className="flex items-center gap-1.5">
+                        <div className="w-16 h-1.5 bg-stone-100 rounded-full overflow-hidden">
+                          <div 
+                            className="h-full bg-[#15803d] rounded-full" 
+                            style={{ width: `${(opt.reliability || 0.95) * 100}%` }}
+                          />
+                        </div>
+                        <span>{((opt.reliability || 0.95) * 100).toFixed(0)}%</span>
+                      </div>
+                    </td>
+                    <td className="py-3 px-3">
+                      <span className="inline-flex items-center gap-1 text-[#15803d] font-semibold">
+                        <CheckCircle2 className="w-3.5 h-3.5" /> SLA Protected
+                      </span>
+                    </td>
+                    <td className="py-3 px-3 text-right">
+                      {isCompliant ? (
+                        <span className="px-2.5 py-1 rounded bg-[#15803d]/10 text-[#15803d] font-bold text-[10px] uppercase">
+                          Auto-Executable
+                        </span>
+                      ) : (
+                        <span className="px-2.5 py-1 rounded bg-[#c92a2a]/10 text-[#c92a2a] font-bold text-[10px] uppercase">
+                          Human Escalation
+                        </span>
+                      )}
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
         </div>
       </div>
     </div>

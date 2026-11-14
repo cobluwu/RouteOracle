@@ -24,7 +24,6 @@ export default function App() {
   const [isLaunched, setIsLaunched] = useState(false);
   const [activeTab, setActiveTab] = useState('dashboard');
   const [alerts, setAlerts] = useState<string>('SYSTEM NOMINAL // NO ACTIVE CRITICAL ALERTS //');
-  const [quotaExceeded, setQuotaExceeded] = useState(false);
   const [isSigningIn, setIsSigningIn] = useState(false);
 
   const { 
@@ -38,12 +37,6 @@ export default function App() {
     isFirebaseConnected,
     setIsFirebaseConnected
   } = useStore();
-
-  useEffect(() => {
-    const handleQuotaExceeded = () => setQuotaExceeded(true);
-    window.addEventListener('gmp-quota-exceeded', handleQuotaExceeded);
-    return () => window.removeEventListener('gmp-quota-exceeded', handleQuotaExceeded);
-  }, []);
 
   // Firebase Authentication & Real-Time Firestore Synchronization
   useEffect(() => {
@@ -244,23 +237,6 @@ export default function App() {
 
       {/* Main Content */}
       <main className="flex-1 flex flex-col relative z-10 bg-[#fbfaf7] overflow-hidden">
-        {quotaExceeded && (
-          <div className="bg-amber-50 border-b border-amber-200 text-amber-900 px-4 py-2 text-xs md:text-sm text-center sticky top-0 z-50 shadow-sm font-mono">
-            <span>
-              Google Maps Platform quota reached. If you are the app owner, visit{' '}
-              <a
-                href="https://developers.google.com/maps/ai/ai-studio?utm_campaign=gmp_mcp_codeassist_v1_aistudio#quota_exceeded_errors"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="underline font-semibold text-amber-950 hover:text-amber-800"
-              >
-                maps developer site
-              </a>{' '}
-              for instructions to update your account.
-            </span>
-          </div>
-        )}
-
         {/* Global Executive Status Header */}
         <header className="h-14 border-b border-[#e5e1d8] flex items-center justify-between px-6 bg-white z-10 shadow-xs">
           <div className="flex items-center gap-4 overflow-hidden whitespace-nowrap w-1/2">
