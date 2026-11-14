@@ -1,102 +1,47 @@
-# RouteOracle 🌐🔮
+# 🛡️ SupplyGuard
 
-**An autonomous supply chain rerouting agent powered by Google's Gemini.**
+**An autonomous supply chain rerouting agent powered by Google's Gemini.** 
 
-RouteOracle is an intelligent logistics and supply chain management platform designed to detect transit disruptions (weather, geopolitical events, port congestion) and autonomously execute or recommend optimal rerouting decisions *before* bottlenecks cascade into delivery failures.
+SupplyGuard is an intelligent logistics and supply chain management platform designed to detect transit disruptions (weather, geopolitical, port congestion) and execute or recommend optimal rerouting decisions *before* bottlenecks cascade into delivery failures.
 
-By leveraging advanced ReAct loops and autonomous LLM orchestration, RouteOracle transforms static logistics monitoring into a proactive, self-healing supply chain network.
+## 🚀 The Core Problem & Solution
 
----
+Global supply chains are inherently fragile. When a disruption strikes, human reaction time is often too slow to prevent Service Level Agreement (SLA) breaches, resulting in heavy financial penalties and degraded customer trust. 
 
-## ⚡ Core Capabilities
+**SupplyGuard** actively listens to WMS/ERP telemetry, weather alerts, and carrier APIs. When a disruption is detected, the AI agent (powered by Gemini) reasons through available carrier capacities, estimates reroute costs against potential SLA penalties, and either executes the optimal reroute autonomously (within strict guardrails) or escalates it to a human planner for approval.
 
-* **Predictive Disruption Detection:** Ingests live, multimodal data to identify emerging threats (e.g., sudden port strikes, severe weather fronts) before they impact active fleets.
-* **Autonomous Rerouting (The Agent Loop):** Utilizes Gemini's advanced tool calling to calculate optimal alternative paths, factoring in fuel costs, time-to-delivery, and warehouse capacities.
-* **Real-Time Telemetry Control:** Pushes live pathing updates via WebSockets directly to the active fleet.
-* **Context Caching & Thought Signatures:** Maintains deep historical context of the supply chain network to ensure high-speed, cost-effective inference during critical rerouting decisions.
+## ✨ Key Features
 
----
+- **🧠 Agentic Reasoning Engine:** A 6-stage autonomous pipeline (Ingest → Detect → Plan → Gate → Execute → Audit) that leverages Gemini to make smart, cost-aware logistics decisions.
+- **🗺️ Live Geo-Network Mapping:** Real-time visualization of fleet assets, active routes, diverted paths, and disruption zones using Leaflet.
+- **📊 Telemetry & Financial Dashboards:** Monitor SLA compliance, critical alerts, ROI (SLA penalties avoided vs. reroute spend), and carbon emissions delta.
+- **🏭 WMS Node Management:** Live tracking of global warehouse capacity, dock utilization, and inbound/outbound volume.
+- **🛡️ Human-in-the-Loop Guardrails:** Configurable autonomous execution thresholds (e.g., max cost, max delay). High-risk reroutes automatically escalate for human approval.
+- **🎨 Custom Tactile UX:** A highly distinctive "paper/tactile" UI aesthetic designed for clarity and focus during high-stress supply chain events.
 
-## 🏗️ System Architecture
+## 🛠️ Tech Stack
 
-RouteOracle is broken down into highly specialized modules, operating in tandem to provide a seamless agentic workflow:
+- **Frontend:** React 18, TypeScript, Vite
+- **Styling:** Tailwind CSS, Framer Motion (for purposeful animation), Lucide React (Icons)
+- **Data Visualization:** Recharts (Financial/Telemetry Area Charts)
+- **Mapping:** React-Leaflet, Leaflet
+- **AI Core:** Google Gemini API
 
-| Module | Function |
-| --- | --- |
-| `Live_Telemetry` | Ingests real-time transit data and environmental variables via WebSockets. |
-| `Agent_Terminal` | The core ReAct loop orchestrator powered by Gemini, handling reasoning, tool execution, and structured outputs. |
-| `Geo_Network` | Manages spatial data, mapping interfaces, and route plotting. |
-| `Active_Fleet` | Tracks real-time states, cargo loads, and fuel levels of all active transit vehicles. |
-| `WMS_Nodes` | Interfaces with Warehouse Management Systems to gauge node capacity and offload feasibility. |
-| `Sys_Config` | Manages global parameters, fallback behaviors, and API configurations. |
+## 🏃‍♂️ Getting Started
 
----
+1. Clone the repository and install dependencies:
+   ```bash
+   npm install
+   ```
+2. Start the development server:
+   ```bash
+   npm run dev
+   ```
 
-## 💻 Tech Stack
+## 🔒 Security & Guardrails
 
-* **AI & LLM Orchestration:** Google AI Studio, Gemini 3.1 Pro API, Custom Python ReAct Agent
-* **Backend & APIs:** Node.js / Express.js, Python, WebSockets for live telemetry
-* **Frontend:** React 19, TypeScript, Tailwind CSS v4, Motion
-* **Database & Auth:** Supabase (PostgreSQL)
-* **Environment & Deployment:** Docker, WSL2 (Ubuntu 26.04 LTS), Google Cloud Platform
-
----
-
-## 🚀 Getting Started
-
-### Prerequisites
-
-* Node.js (v20+) & Python (3.11+)
-* Docker & Docker Compose
-* Google AI Studio API Key (`GEMINI_API_KEY`)
-* Supabase Project Keys
-
-### Installation
-
-1. **Clone the repository**
-```bash
-git clone https://github.com/cobluwu/RouteOracle.git
-cd RouteOracle
-
-```
-
-
-2. **Set up the AI Backend (Python)**
-```bash
-cd backend
-python -m venv venv
-source venv/bin/activate  # On WSL/Linux
-pip install -r requirements.txt
-
-```
-
-
-3. **Set up the Client (React 19)**
-```bash
-cd ../client
-npm install
-
-```
-
-
-4. **Environment Variables**
-Create a `.env` file in the root directory and add your credentials:
-```env
-GEMINI_API_KEY=your_google_ai_studio_key
-SUPABASE_URL=your_supabase_url
-SUPABASE_ANON_KEY=your_supabase_anon_key
-
-```
-
-
-5. **Spin up the environment**
-```bash
-docker-compose up --build
-
-```
-
-
-
----
-
-*Designed and engineered for the Hack2Skill Google Solution Challenge.*
+SupplyGuard is designed with safety first. The AI is strictly constrained by rule-based gates. It will **escalate** rather than auto-execute if:
+- Reroute cost exceeds the configured threshold (e.g., >$5000).
+- Transit delay exceeds SLA tolerances.
+- The proposed route enters restricted geopolitical zones (configurable).
+- The AI confidence score is not strictly "high".

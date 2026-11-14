@@ -1,0 +1,128 @@
+{
+  "entities": {
+    "AuditLog": {
+      "title": "AuditLog",
+      "description": "Log entry of autonomous or human-escalated reroute decisions",
+      "type": "object",
+      "properties": {
+        "audit_id": { "type": "string", "maxLength": 128 },
+        "timestamp": { "type": "string", "maxLength": 64 },
+        "disruption_type": { "type": "string", "maxLength": 128 },
+        "disruption_summary": { "type": "string", "maxLength": 1000 },
+        "plan_selected": { "type": "string", "maxLength": 256 },
+        "decision_type": { "type": "string", "maxLength": 64 },
+        "cost_delta_usd": { "type": "number" },
+        "delay_hours": { "type": "number" },
+        "sla_preserved": { "type": "boolean" },
+        "steps_completed": { "type": "array" },
+        "asset_id": { "type": "string", "maxLength": 64 },
+        "userId": { "type": "string", "maxLength": 128 },
+        "createdAt": { "type": "string", "maxLength": 64 }
+      },
+      "required": ["audit_id", "timestamp", "disruption_type", "disruption_summary", "plan_selected", "decision_type", "cost_delta_usd", "delay_hours", "sla_preserved"]
+    },
+    "WmsNode": {
+      "title": "WmsNode",
+      "description": "Warehouse and distribution center node status and capacity",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 64 },
+        "name": { "type": "string", "maxLength": 128 },
+        "region": { "type": "string", "maxLength": 32 },
+        "tier": { "type": "number" },
+        "lat": { "type": "number" },
+        "lng": { "type": "number" },
+        "capacity_pct": { "type": "number" },
+        "status": { "type": "string", "maxLength": 32 },
+        "active_docks": { "type": "number" },
+        "total_docks": { "type": "number" },
+        "inbound_shipments": { "type": "number" },
+        "outbound_shipments": { "type": "number" },
+        "last_updated": { "type": "string", "maxLength": 64 }
+      },
+      "required": ["id", "name", "region", "tier", "capacity_pct", "status", "active_docks", "total_docks"]
+    },
+    "FleetRoute": {
+      "title": "FleetRoute",
+      "description": "Live active transit route and vessel/aircraft/ground vehicle manifest",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 64 },
+        "type": { "type": "string", "maxLength": 32 },
+        "origin": { "type": "string", "maxLength": 128 },
+        "dest": { "type": "string", "maxLength": 128 },
+        "eta": { "type": "string", "maxLength": 64 },
+        "status": { "type": "string", "maxLength": 64 },
+        "color": { "type": "string", "maxLength": 32 }
+      },
+      "required": ["id", "type", "origin", "dest", "eta", "status"]
+    },
+    "FleetSummary": {
+      "title": "FleetSummary",
+      "description": "Aggregated fleet status metrics across ocean, air, and ground modes",
+      "type": "object",
+      "properties": {
+        "ocean": { "type": "object" },
+        "air": { "type": "object" },
+        "ground": { "type": "object" },
+        "updatedAt": { "type": "string", "maxLength": 64 }
+      },
+      "required": ["ocean", "air", "ground"]
+    },
+    "SystemConfig": {
+      "title": "SystemConfig",
+      "description": "Global autonomous rerouting governance parameters and risk gates",
+      "type": "object",
+      "properties": {
+        "maxCost": { "type": "number" },
+        "maxDelay": { "type": "number" },
+        "autoMode": { "type": "boolean" },
+        "avoidRedSea": { "type": "boolean" },
+        "avoidPanamaCanal": { "type": "boolean" },
+        "strictCarbon": { "type": "boolean" },
+        "updatedAt": { "type": "string", "maxLength": 64 }
+      },
+      "required": ["maxCost", "maxDelay", "autoMode"]
+    },
+    "UserProfile": {
+      "title": "UserProfile",
+      "description": "Authenticated operator or logistics engineer profile",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string", "maxLength": 128 },
+        "email": { "type": "string", "maxLength": 256 },
+        "displayName": { "type": "string", "maxLength": 128 },
+        "photoURL": { "type": "string", "maxLength": 1024 },
+        "role": { "type": "string", "maxLength": 32 },
+        "createdAt": { "type": "string", "maxLength": 64 }
+      },
+      "required": ["uid", "email"]
+    }
+  },
+  "firestore": {
+    "/audit_logs/{auditId}": {
+      "schema": "AuditLog",
+      "description": "Autonomous rerouting decision logs and execution audit trail"
+    },
+    "/wms_nodes/{nodeId}": {
+      "schema": "WmsNode",
+      "description": "Global warehouse network nodes and real-time dock capacity"
+    },
+    "/fleet_routes/{routeId}": {
+      "schema": "FleetRoute",
+      "description": "Active asset transit corridors and current status"
+    },
+    "/fleet_summary/{docId}": {
+      "schema": "FleetSummary",
+      "description": "High-level fleet capacity and asset volume summary"
+    },
+    "/system_config/{configId}": {
+      "schema": "SystemConfig",
+      "description": "System safety limits and corridor constraints"
+    },
+    "/users/{userId}": {
+      "schema": "UserProfile",
+      "description": "Operator profile and permissions"
+    }
+  }
+}

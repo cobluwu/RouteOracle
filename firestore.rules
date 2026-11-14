@@ -1,0 +1,105 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Default-deny global safety net
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // Hardened global helpers
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() > 0 && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    // User Profile Rules
+    match /users/{userId} {
+      allow get: if isSignedIn() && (request.auth.uid == userId);
+      allow list: if false; // Disallow querying user list to prevent PII harvesting
+      allow create, update: if isSignedIn() 
+        && request.auth.uid == userId
+        && isValidId(userId)
+        && incoming().uid == request.auth.uid
+        && incoming().email is string && incoming().email.size() <= 256;
+      allow delete: if false;
+    }
+
+    // Audit Log Rules - Immutable Compliance Records
+    match /audit_logs/{auditId} {
+      allow read: if isSignedIn();
+      allow create: if isSignedIn()
+        && isValidId(auditId)
+        && incoming().audit_id is string && incoming().audit_id.size() <= 128
+        && incoming().timestamp is string && incoming().timestamp.size() <= 64
+        && incoming().disruption_type is string && incoming().disruption_type.size() <= 128
+        && incoming().disruption_summary is string && incoming().disruption_summary.size() <= 1000
+        && incoming().plan_selected is string && incoming().plan_selected.size() <= 256
+        && incoming().decision_type is string && incoming().decision_type.size() <= 64
+        && incoming().cost_delta_usd is number
+        && incoming().delay_hours is number
+        && incoming().sla_preserved is bool;
+      // Strictly immutable: once written, audits cannot be modified or deleted
+      allow update, delete: if false;
+    }
+
+    // WMS Warehouse Nodes Rules
+    match /wms_nodes/{nodeId} {
+      allow read: if isSignedIn();
+      allow create, update: if isSignedIn()
+        && isValidId(nodeId)
+        && incoming().id is string && incoming().id.size() <= 64
+        && incoming().name is string && incoming().name.size() <= 128
+        && incoming().region is string && incoming().region.size() <= 32
+        && incoming().capacity_pct is number
+        && incoming().status is string && incoming().status.size() <= 32;
+      allow delete: if false;
+    }
+
+    // Fleet Active Routes Rules
+    match /fleet_routes/{routeId} {
+      allow read: if isSignedIn();
+      allow create, update: if isSignedIn()
+        && isValidId(routeId)
+        && incoming().id is string && incoming().id.size() <= 64
+        && incoming().type is string && incoming().type.size() <= 32
+        && incoming().origin is string && incoming().origin.size() <= 128
+        && incoming().dest is string && incoming().dest.size() <= 128
+        && incoming().status is string && incoming().status.size() <= 64;
+      allow delete: if false;
+    }
+
+    // Fleet Summary Metrics
+    match /fleet_summary/{docId} {
+      allow read: if isSignedIn();
+      allow create, update: if isSignedIn()
+        && isValidId(docId)
+        && incoming().ocean is map
+        && incoming().air is map
+        && incoming().ground is map;
+      allow delete: if false;
+    }
+
+    // System Governance Configuration Rules
+    match /system_config/{configId} {
+      allow read: if isSignedIn();
+      allow create, update: if isSignedIn()
+        && isValidId(configId)
+        && incoming().maxCost is number
+        && incoming().maxDelay is number
+        && incoming().autoMode is bool;
+      allow delete: if false;
+    }
+  }
+}

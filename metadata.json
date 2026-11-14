@@ -1,0 +1,8 @@
+{
+  "name": "SupplyGuard",
+  "description": "Autonomous supply chain rerouting agent dashboard.",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}
